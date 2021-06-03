@@ -256,7 +256,7 @@ func NewTracer(config *config.Config) (*Tracer, error) {
 		config:                     config,
 		state:                      state,
 		reverseDNS:                 reverseDNS,
-		httpMonitor:                newHTTPMonitor(!pre410Kernel, config),
+		httpMonitor:                newHTTPMonitor(!pre410Kernel, config, mgrOptions.ConstantEditors),
 		buffer:                     make([]network.ConnectionStats, 0, 512),
 		conntracker:                conntracker,
 		sourceExcludes:             network.ParseConnectionFilters(config.ExcludedSourceConnections),
@@ -950,7 +950,7 @@ func (t *Tracer) connVia(cs *network.ConnectionStats) {
 	cs.Via = t.gwLookup.Lookup(cs)
 }
 
-func newHTTPMonitor(supported bool, c *config.Config) *http.Monitor {
+func newHTTPMonitor(supported bool, c *config.Config, offsets []manager.ConstantEditor) *http.Monitor {
 	if !c.EnableHTTPMonitoring {
 		return nil
 	}
@@ -960,7 +960,7 @@ func newHTTPMonitor(supported bool, c *config.Config) *http.Monitor {
 		return nil
 	}
 
-	monitor, err := http.NewMonitor(c)
+	monitor, err := http.NewMonitor(c, offsets)
 	if err != nil {
 		log.Errorf("could not instantiate http monitor: %s", err)
 		return nil

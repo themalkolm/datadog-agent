@@ -21,6 +21,9 @@ const (
 	// This value should be enough for typical workloads (e.g. some amount of processes blocked on the accept syscall).
 	maxActive                = 128
 	defaultClosedChannelSize = 500
+
+	// TODO: this is only hardcoded here for the PoC
+	libSSL = "/lib/x86_64-linux-gnu/libssl.so.1.1"
 )
 
 type ebpfProgram struct {
@@ -28,9 +31,10 @@ type ebpfProgram struct {
 	cfg         *config.Config
 	perfHandler *ddebpf.PerfHandler
 	bytecode    bytecode.AssetReader
+	offsets     []manager.ConstantEditor
 }
 
-func newEBPFProgram(c *config.Config) (*ebpfProgram, error) {
+func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor) (*ebpfProgram, error) {
 	bytecode, err := netebpf.ReadHTTPModule(c.BPFDir, c.BPFDebug)
 	if err != nil {
 		return nil, err
@@ -47,6 +51,10 @@ func newEBPFProgram(c *config.Config) (*ebpfProgram, error) {
 			{Name: string(probes.HttpInFlightMap)},
 			{Name: string(probes.HttpBatchesMap)},
 			{Name: string(probes.HttpBatchStateMap)},
+			{Name: "sockfd_by_pid_tgid"},
+			{Name: "tup_by_pid_sockfd"},
+			{Name: "tup_by_ssl_ctx"},
+			{Name: "ssl_read_args"},
 		},
 		PerfMaps: []*manager.PerfMap{
 			{
@@ -61,6 +69,13 @@ func newEBPFProgram(c *config.Config) (*ebpfProgram, error) {
 		},
 		Probes: []*manager.Probe{
 			{Section: string(probes.TCPSendMsgReturn), KProbeMaxActive: maxActive},
+			{Section: string(probes.SockMapFdReturn), KProbeMaxActive: maxActive},
+			{Section: "kprobe/sockfd_lookup_light", KProbeMaxActive: maxActive},
+			{Section: "uprobe/SSL_set_fd", BinaryPath: libSSL},
+			{Section: "uprobe/SSL_read", BinaryPath: libSSL},
+			{Section: "uretprobe/SSL_read", BinaryPath: libSSL},
+			{Section: "uprobe/SSL_write", BinaryPath: libSSL},
+			{Section: "uprobe/SSL_shutdown", BinaryPath: libSSL},
 			{Section: string(probes.SocketHTTPFilter)},
 		},
 	}
@@ -70,6 +85,7 @@ func newEBPFProgram(c *config.Config) (*ebpfProgram, error) {
 		perfHandler: perfHandler,
 		bytecode:    bytecode,
 		cfg:         c,
+		offsets:     offsets,
 	}, nil
 }
 
@@ -99,6 +115,42 @@ func (e *ebpfProgram) Init() error {
 					Section: string(probes.TCPSendMsgReturn),
 				},
 			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: string(probes.SockMapFdReturn),
+				},
+			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: "kprobe/sockfd_lookup_light",
+				},
+			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: "uprobe/SSL_set_fd",
+				},
+			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: "uprobe/SSL_read",
+				},
+			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: "uretprobe/SSL_read",
+				},
+			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: "uprobe/SSL_write",
+				},
+			},
+			&manager.ProbeSelector{
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					Section: "uprobe/SSL_shutdown",
+				},
+			},
 		},
+		ConstantEditors: e.offsets,
 	})
 }

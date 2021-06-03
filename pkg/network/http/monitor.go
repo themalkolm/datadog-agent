@@ -38,8 +38,8 @@ type Monitor struct {
 }
 
 // NewMonitor returns a new Monitor instance
-func NewMonitor(c *config.Config) (*Monitor, error) {
-	mgr, err := newEBPFProgram(c)
+func NewMonitor(c *config.Config, offsets []manager.ConstantEditor) (*Monitor, error) {
+	mgr, err := newEBPFProgram(c, offsets)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up http ebpf program: %s", err)
 	}
