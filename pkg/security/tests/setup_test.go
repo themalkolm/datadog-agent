@@ -531,8 +531,8 @@ func (tm *testModule) EventDiscarderFound(rs *rules.RuleSet, event eval.Event, f
 	}
 }
 
-func (tm *testModule) GetEvent() (*sprobe.Event, *eval.Rule, error) {
-	timeout := time.After(getEventTimeout)
+func (tm *testModule) GetEventWithTimeout(timeoutDuration time.Duration) (*sprobe.Event, *eval.Rule, error) {
+	timeout := time.After(timeoutDuration)
 
 	for {
 		select {
@@ -545,6 +545,10 @@ func (tm *testModule) GetEvent() (*sprobe.Event, *eval.Rule, error) {
 			return nil, nil, errors.New("timeout")
 		}
 	}
+}
+
+func (tm *testModule) GetEvent() (*sprobe.Event, *eval.Rule, error) {
+	return tm.GetEventWithTimeout(getEventTimeout)
 }
 
 func (tm *testModule) GetProbeCustomEvent(timeout time.Duration, eventType ...eval.EventType) (*module.RuleEvent, error) {
