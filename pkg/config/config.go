@@ -560,10 +560,12 @@ func InitConfig(config Config) {
 
 	// GCE
 	config.BindEnvAndSetDefault("collect_gce_tags", true)
-	config.BindEnvAndSetDefault("exclude_gce_tags", []string{"kube-env", "kubelet-config", "containerd-configure-sh", "startup-script", "shutdown-script",
+	config.BindEnvAndSetDefault("exclude_gce_tags", []string{
+		"kube-env", "kubelet-config", "containerd-configure-sh", "startup-script", "shutdown-script",
 		"configure-sh", "sshKeys", "ssh-keys", "user-data", "cli-cert", "ipsec-cert", "ssl-cert", "google-container-manifest",
 		"bosh_settings", "windows-startup-script-ps1", "common-psm1", "k8s-node-setup-psm1", "serial-port-logging-enable",
-		"enable-oslogin", "disable-address-manager", "disable-legacy-endpoints", "windows-keys", "kubeconfig"})
+		"enable-oslogin", "disable-address-manager", "disable-legacy-endpoints", "windows-keys", "kubeconfig",
+	})
 	config.BindEnvAndSetDefault("gce_send_project_id_tag", false)
 	config.BindEnvAndSetDefault("gce_metadata_timeout", 1000) // value in milliseconds
 
@@ -880,9 +882,7 @@ func InitConfig(config Config) {
 	setupAPM(config)
 }
 
-var (
-	ddURLRegexp = regexp.MustCompile(`^app(\.(us|eu)\d)?\.datad(oghq|0g)\.(com|eu)$`)
-)
+var ddURLRegexp = regexp.MustCompile(`^app(\.(us|eu)\d)?\.datad(oghq|0g)\.(com|eu)$`)
 
 // GetProxies returns the proxy settings from the configuration
 func GetProxies() *Proxy {
@@ -1363,17 +1363,29 @@ func IsCLCRunner() bool {
 	if !Datadog.GetBool("clc_runner_enabled") {
 		return false
 	}
-	var cp []ConfigurationProviders
-	if err := Datadog.UnmarshalKey("config_providers", &cp); err == nil {
-		for _, name := range Datadog.GetStringSlice("extra_config_providers") {
-			cp = append(cp, ConfigurationProviders{Name: name})
-		}
-		if len(cp) == 1 && cp[0].Name == "clusterchecks" {
-			// A cluster check runner is an Agent configured to run clusterchecks only
-			return true
+
+	var cps []ConfigurationProviders
+	if err := Datadog.UnmarshalKey("config_providers", &cps); err != nil {
+		return false
+	}
+
+	for _, name := range Datadog.GetStringSlice("extra_config_providers") {
+		cps = append(cps, ConfigurationProviders{Name: name})
+	}
+
+	// A cluster check runner is an Agent configured to run clusterchecks only
+	// We want exactly one ConfigProvider named clusterchecks
+	if len(cps) == 0 {
+		return false
+	}
+
+	for _, cp := range cps {
+		if cp.Name != "clusterchecks" {
+			return false
 		}
 	}
-	return false
+
+	return true
 }
 
 // GetBindHost returns `bind_host` variable or default value
