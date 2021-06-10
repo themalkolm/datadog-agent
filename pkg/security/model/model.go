@@ -411,7 +411,7 @@ type OpenEvent struct {
 }
 
 // SELinuxRawBufCapacity represents the capacity of the byte array in a SELinuxEvent
-const SELinuxRawBufCapacity = 32
+const SELinuxRawBufCapacity = 36
 
 // SELinuxEvent represents a selinux event
 type SELinuxEvent struct {
