@@ -41,6 +41,8 @@ func easyjsonA970e379DecodeGithubComDataDogDatadogAgentPkgSecurityProbe(in *jlex
 		switch key {
 		case "status":
 			out.Status = string(in.String())
+		case "changed":
+			out.Changed = bool(in.Bool())
 		default:
 			in.SkipRecursive()
 		}
@@ -60,6 +62,16 @@ func easyjsonA970e379EncodeGithubComDataDogDatadogAgentPkgSecurityProbe(out *jwr
 		first = false
 		out.RawString(prefix[1:])
 		out.String(string(in.Status))
+	}
+	{
+		const prefix string = ",\"changed\":"
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
+		out.Bool(bool(in.Changed))
 	}
 	out.RawByte('}')
 }
@@ -122,9 +134,8 @@ func easyjsonA970e379EncodeGithubComDataDogDatadogAgentPkgSecurityProbe1(out *jw
 	out.RawByte('{')
 	first := true
 	_ = first
-	if in.State {
+	{
 		const prefix string = ",\"state\":"
-		first = false
 		out.RawString(prefix[1:])
 		out.Bool(bool(in.State))
 	}
@@ -177,6 +188,8 @@ func easyjsonA970e379DecodeGithubComDataDogDatadogAgentPkgSecurityProbe2(in *jle
 			out.Name = string(in.String())
 		case "state":
 			out.State = string(in.String())
+		case "changed":
+			out.Changed = bool(in.Bool())
 		default:
 			in.SkipRecursive()
 		}
@@ -206,6 +219,16 @@ func easyjsonA970e379EncodeGithubComDataDogDatadogAgentPkgSecurityProbe2(out *jw
 			out.RawString(prefix)
 		}
 		out.String(string(in.State))
+	}
+	{
+		const prefix string = ",\"changed\":"
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
+		out.Bool(bool(in.Changed))
 	}
 	out.RawByte('}')
 }
