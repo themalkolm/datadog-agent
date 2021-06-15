@@ -417,8 +417,7 @@ type SELinuxEventKind uint32
 
 const (
 	SELinuxBoolChangeEventKind SELinuxEventKind = iota
-	SELinuxEnforceChangeEventKind
-	SELinuxDisableChangeEventKind
+	SELinuxStatusChangeEventKind
 	SELinuxBoolCommitEventKind
 )
 
