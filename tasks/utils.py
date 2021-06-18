@@ -57,23 +57,9 @@ def get_nikos_linker_flags(nikos_libs_path):
         'json-c', 'lzma', 'xml2', 'popt', 'zstd'
     ]
     # hardcode the path to each library to ensure we link against the version which was built by omnibus-nikos
-    linker_flags = list(map(lambda lib: nikos_libs_path + '/lib' + lib + '.a', nikos_libs))
-
-    # TEMPORARY: sub certain static libs for their shared counterparts
-    for i, flag in enumerate(linker_flags):
-        if 'gpg-error' in flag:
-            linker_flags[i] = '-lgpg-error'
-        if 'assuan' in flag:
-            linker_flags[i] = '-lassuan'
-        if 'gpgme' in flag:
-            linker_flags[i] = '-lgpgme'
-        if 'gcrypt' in flag:
-            linker_flags[i] = '-lgcrypt'
-        if 'dnf' in flag:
-            linker_flags[i] = '-ldnf'
+    linker_flags = map(lambda lib: nikos_libs_path + '/lib' + lib + '.a', nikos_libs)
     
-    return ' -Wl,-rpath,' + nikos_libs_path \
-        + ' -L' + nikos_libs_path + ' ' \
+    return ' -L' + nikos_libs_path + ' ' \
         + ' '.join(linker_flags) \
         + ' -l:libresolv.a -lstdc++ -pthread -ldl -lm'
 
@@ -145,7 +131,6 @@ def get_build_flags(
     if nikos_embedded_path is not None:
         env['PKG_CONFIG_PATH'] = env.get('PKG_CONFIG_PATH', '') + ':' + nikos_embedded_path + '/lib/pkgconfig'
         env["CGO_LDFLAGS"] = env.get('CGO_LDFLAGS', '') + get_nikos_linker_flags(nikos_embedded_path + '/lib') 
-        env["LD_LIBRARY_PATH"] = env.get('LD_LIBRARY_PATH', '') + ':' + nikos_embedded_path + '/lib'
 
     # if `static` was passed ignore setting rpath, even if `embedded_path` was passed as well
     if static:
