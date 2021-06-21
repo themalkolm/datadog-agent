@@ -1,7 +1,10 @@
-package network
+//+build windows linux_bpf
+
+package dns
 
 import (
 	"bytes"
+	"syscall"
 
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/google/gopacket"
@@ -83,37 +86,37 @@ func (p *dnsParser) ParseInto(data []byte, t *translation, pktInfo *dnsPacketInf
 	for _, layer := range p.layers {
 		switch layer {
 		case layers.LayerTypeIPv4:
-			if pktInfo.pktType == Query {
-				pktInfo.key.clientIP = util.AddressFromNetIP(p.ipv4Payload.SrcIP)
-				pktInfo.key.serverIP = util.AddressFromNetIP(p.ipv4Payload.DstIP)
+			if pktInfo.pktType == query {
+				pktInfo.key.ClientIP = util.AddressFromNetIP(p.ipv4Payload.SrcIP)
+				pktInfo.key.ServerIP = util.AddressFromNetIP(p.ipv4Payload.DstIP)
 			} else {
-				pktInfo.key.serverIP = util.AddressFromNetIP(p.ipv4Payload.SrcIP)
-				pktInfo.key.clientIP = util.AddressFromNetIP(p.ipv4Payload.DstIP)
+				pktInfo.key.ServerIP = util.AddressFromNetIP(p.ipv4Payload.SrcIP)
+				pktInfo.key.ClientIP = util.AddressFromNetIP(p.ipv4Payload.DstIP)
 			}
 		case layers.LayerTypeIPv6:
-			if pktInfo.pktType == Query {
-				pktInfo.key.clientIP = util.AddressFromNetIP(p.ipv6Payload.SrcIP)
-				pktInfo.key.serverIP = util.AddressFromNetIP(p.ipv6Payload.DstIP)
+			if pktInfo.pktType == query {
+				pktInfo.key.ClientIP = util.AddressFromNetIP(p.ipv6Payload.SrcIP)
+				pktInfo.key.ServerIP = util.AddressFromNetIP(p.ipv6Payload.DstIP)
 			} else {
-				pktInfo.key.serverIP = util.AddressFromNetIP(p.ipv6Payload.SrcIP)
-				pktInfo.key.clientIP = util.AddressFromNetIP(p.ipv6Payload.DstIP)
+				pktInfo.key.ServerIP = util.AddressFromNetIP(p.ipv6Payload.SrcIP)
+				pktInfo.key.ClientIP = util.AddressFromNetIP(p.ipv6Payload.DstIP)
 
 			}
 		case layers.LayerTypeUDP:
-			if pktInfo.pktType == Query {
-				pktInfo.key.clientPort = uint16(p.udpPayload.SrcPort)
+			if pktInfo.pktType == query {
+				pktInfo.key.ClientPort = uint16(p.udpPayload.SrcPort)
 			} else {
-				pktInfo.key.clientPort = uint16(p.udpPayload.DstPort)
+				pktInfo.key.ClientPort = uint16(p.udpPayload.DstPort)
 
 			}
-			pktInfo.key.protocol = UDP
+			pktInfo.key.Protocol = syscall.IPPROTO_UDP
 		case layers.LayerTypeTCP:
-			if pktInfo.pktType == Query {
-				pktInfo.key.clientPort = uint16(p.tcpPayload.SrcPort)
+			if pktInfo.pktType == query {
+				pktInfo.key.ClientPort = uint16(p.tcpPayload.SrcPort)
 			} else {
-				pktInfo.key.clientPort = uint16(p.tcpPayload.DstPort)
+				pktInfo.key.ClientPort = uint16(p.tcpPayload.DstPort)
 			}
-			pktInfo.key.protocol = TCP
+			pktInfo.key.Protocol = syscall.IPPROTO_TCP
 		}
 	}
 
@@ -139,7 +142,7 @@ func (p *dnsParser) parseAnswerInto(
 
 	// Only consider responses
 	if !dns.QR {
-		pktInfo.pktType = Query
+		pktInfo.pktType = query
 		if p.collectDNSDomains {
 			pktInfo.question = string(question.Name)
 		}
@@ -148,7 +151,7 @@ func (p *dnsParser) parseAnswerInto(
 
 	pktInfo.rCode = uint8(dns.ResponseCode)
 	if dns.ResponseCode != 0 {
-		pktInfo.pktType = FailedResponse
+		pktInfo.pktType = failedResponse
 		return nil
 	}
 
@@ -166,7 +169,7 @@ func (p *dnsParser) parseAnswerInto(
 	p.extractIPsInto(alias, domainQueried, dns.Additionals, t)
 	t.dns = string(domainQueried)
 
-	pktInfo.pktType = SuccessfulResponse
+	pktInfo.pktType = successfulResponse
 	return nil
 }
 

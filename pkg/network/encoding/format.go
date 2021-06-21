@@ -6,6 +6,7 @@ import (
 
 	model "github.com/DataDog/agent-payload/process"
 	"github.com/DataDog/datadog-agent/pkg/network"
+	"github.com/DataDog/datadog-agent/pkg/network/dns"
 	"github.com/DataDog/datadog-agent/pkg/network/http"
 	"github.com/DataDog/datadog-agent/pkg/network/nat"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
@@ -275,14 +276,14 @@ func formatEphemeralType(e network.EphemeralPortType) model.EphemeralPortState {
 		return model.EphemeralPortState_ephemeralUnspecified
 	}
 }
-func formatDNSStatsByDomain(stats map[string]network.DNSStats, domainSet map[string]int) map[int32]*model.DNSStats {
+func formatDNSStatsByDomain(stats map[string]dns.Stats, domainSet map[string]int) map[int32]*model.DNSStats {
 	m := make(map[int32]*model.DNSStats)
 	for d, s := range stats {
 		var ms model.DNSStats
-		ms.DnsCountByRcode = s.DNSCountByRcode
-		ms.DnsFailureLatencySum = s.DNSFailureLatencySum
-		ms.DnsSuccessLatencySum = s.DNSSuccessLatencySum
-		ms.DnsTimeouts = s.DNSTimeouts
+		ms.DnsCountByRcode = s.CountByRcode
+		ms.DnsFailureLatencySum = s.FailureLatencySum
+		ms.DnsSuccessLatencySum = s.SuccessLatencySum
+		ms.DnsTimeouts = s.Timeouts
 		pos, ok := domainSet[d]
 		if !ok {
 			pos = len(domainSet)

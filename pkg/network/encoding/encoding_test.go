@@ -6,6 +6,7 @@ import (
 
 	model "github.com/DataDog/agent-payload/process"
 	"github.com/DataDog/datadog-agent/pkg/network"
+	"github.com/DataDog/datadog-agent/pkg/network/dns"
 	"github.com/DataDog/datadog-agent/pkg/network/http"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/DataDog/sketches-go/ddsketch"
@@ -47,12 +48,12 @@ func TestSerialization(t *testing.T) {
 				Direction: network.LOCAL,
 
 				DNSCountByRcode: map[uint32]uint32{0: 1},
-				DNSStatsByDomain: map[string]network.DNSStats{
+				DNSStatsByDomain: map[string]dns.Stats{
 					"foo.com": {
-						DNSTimeouts:          0,
-						DNSSuccessLatencySum: 0,
-						DNSFailureLatencySum: 0,
-						DNSCountByRcode:      map[uint32]uint32{0: 1},
+						Timeouts:          0,
+						SuccessLatencySum: 0,
+						FailureLatencySum: 0,
+						CountByRcode:      map[uint32]uint32{0: 1},
 					},
 				},
 				Via: &network.Via{

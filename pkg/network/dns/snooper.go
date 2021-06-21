@@ -1,4 +1,6 @@
-package network
+//+build windows linux_bpf
+
+package dns
 
 import (
 	"sync"
@@ -17,10 +19,10 @@ const (
 	dnsCacheSize             = 100000
 )
 
-var _ ReverseDNS = &SocketFilterSnooper{}
+var _ ReverseDNS = &socketFilterSnooper{}
 
-// SocketFilterSnooper is a DNS traffic snooper built on top of an eBPF SOCKET_FILTER
-type SocketFilterSnooper struct {
+// socketFilterSnooper is a DNS traffic snooper built on top of an eBPF SOCKET_FILTER
+type socketFilterSnooper struct {
 	// Telemetry is at the beginning of the struct to keep all fields 64-bit aligned.
 	// see https://staticcheck.io/docs/checks#SA1027
 	decodingErrors int64
@@ -31,7 +33,7 @@ type SocketFilterSnooper struct {
 	successes int64
 	errors    int64
 
-	source          PacketSource
+	source          packetSource
 	parser          *dnsParser
 	cache           *reverseDNSCache
 	statKeeper      *dnsStatKeeper
@@ -43,11 +45,11 @@ type SocketFilterSnooper struct {
 	translation *translation
 }
 
-// PacketSource reads raw packet data
-type PacketSource interface {
+// packetSource reads raw packet data
+type packetSource interface {
 	// VisitPackets reads all new raw packets that are available, invoking the given callback for each packet.
 	// If no packet is available, VisitPacket returns immediately.
-	// The format of the packet is dependent on the implementation of PacketSource -- i.e. it may be an ethernet frame, or a IP frame.
+	// The format of the packet is dependent on the implementation of packetSource -- i.e. it may be an ethernet frame, or a IP frame.
 	// The data buffer is reused between invocations of VisitPacket and thus should not be pointed to.
 	// If the cancel channel is closed, VisitPackets will stop reading.
 	VisitPackets(cancel <-chan struct{}, visitor func(data []byte, timestamp time.Time) error) error
@@ -62,8 +64,8 @@ type PacketSource interface {
 	Close()
 }
 
-// NewSocketFilterSnooper returns a new SocketFilterSnooper
-func NewSocketFilterSnooper(cfg *config.Config, source PacketSource) (*SocketFilterSnooper, error) {
+// newSocketFilterSnooper returns a new socketFilterSnooper
+func newSocketFilterSnooper(cfg *config.Config, source packetSource) (*socketFilterSnooper, error) {
 	cache := newReverseDNSCache(dnsCacheSize, dnsCacheTTL, dnsCacheExpirationPeriod)
 	var statKeeper *dnsStatKeeper
 	if cfg.CollectDNSStats {
@@ -75,7 +77,7 @@ func NewSocketFilterSnooper(cfg *config.Config, source PacketSource) (*SocketFil
 	} else {
 		log.Infof("DNS Stats Collection has been disabled.")
 	}
-	snooper := &SocketFilterSnooper{
+	snooper := &socketFilterSnooper{
 		source:          source,
 		parser:          newDNSParser(source.PacketType(), cfg.CollectDNSStats, cfg.CollectDNSDomains),
 		cache:           cache,
@@ -102,12 +104,12 @@ func NewSocketFilterSnooper(cfg *config.Config, source PacketSource) (*SocketFil
 }
 
 // Resolve IPs to DNS addresses
-func (s *SocketFilterSnooper) Resolve(connections []ConnectionStats) map[util.Address][]string {
-	return s.cache.Get(connections, time.Now())
+func (s *socketFilterSnooper) Resolve(ips []util.Address) map[util.Address][]string {
+	return s.cache.Get(ips, time.Now())
 }
 
-// GetDNSStats gets the latest DNSStats keyed by unique DNSKey, and domain
-func (s *SocketFilterSnooper) GetDNSStats() map[DNSKey]map[string]DNSStats {
+// GetDNSStats gets the latest Stats keyed by unique Key, and domain
+func (s *socketFilterSnooper) GetDNSStats() map[Key]map[string]Stats {
 	if s.statKeeper == nil {
 		return nil
 	}
@@ -115,7 +117,7 @@ func (s *SocketFilterSnooper) GetDNSStats() map[DNSKey]map[string]DNSStats {
 }
 
 // GetStats returns stats for use with telemetry
-func (s *SocketFilterSnooper) GetStats() map[string]int64 {
+func (s *socketFilterSnooper) GetStats() map[string]int64 {
 	stats := s.cache.Stats()
 
 	for key, value := range s.source.Stats() {
@@ -137,7 +139,7 @@ func (s *SocketFilterSnooper) GetStats() map[string]int64 {
 }
 
 // Close terminates the DNS traffic snooper as well as the underlying socket and the attached filter
-func (s *SocketFilterSnooper) Close() {
+func (s *socketFilterSnooper) Close() {
 	close(s.exit)
 	s.wg.Wait()
 	s.source.Close()
@@ -153,7 +155,7 @@ func (s *SocketFilterSnooper) Close() {
 // The *translation is recycled and re-used in subsequent calls and it should not be accessed concurrently.
 // The second parameter `ts` is the time when the packet was captured off the wire. This is used for latency calculation
 // and much more reliable than calling time.Now() at the user layer.
-func (s *SocketFilterSnooper) processPacket(data []byte, ts time.Time) error {
+func (s *socketFilterSnooper) processPacket(data []byte, ts time.Time) error {
 	t := s.getCachedTranslation()
 	pktInfo := dnsPacketInfo{}
 
@@ -169,14 +171,14 @@ func (s *SocketFilterSnooper) processPacket(data []byte, ts time.Time) error {
 		return nil
 	}
 
-	if s.statKeeper != nil && (s.collectLocalDNS || !pktInfo.key.serverIP.IsLoopback()) {
+	if s.statKeeper != nil && (s.collectLocalDNS || !pktInfo.key.ServerIP.IsLoopback()) {
 		s.statKeeper.ProcessPacketInfo(pktInfo, ts)
 	}
 
-	if pktInfo.pktType == SuccessfulResponse {
+	if pktInfo.pktType == successfulResponse {
 		s.cache.Add(t, time.Now())
 		atomic.AddInt64(&s.successes, 1)
-	} else if pktInfo.pktType == FailedResponse {
+	} else if pktInfo.pktType == failedResponse {
 		atomic.AddInt64(&s.errors, 1)
 	} else {
 		atomic.AddInt64(&s.queries, 1)
@@ -185,7 +187,7 @@ func (s *SocketFilterSnooper) processPacket(data []byte, ts time.Time) error {
 	return nil
 }
 
-func (s *SocketFilterSnooper) pollPackets() {
+func (s *socketFilterSnooper) pollPackets() {
 	for {
 		err := s.source.VisitPackets(s.exit, s.processPacket)
 
@@ -205,7 +207,7 @@ func (s *SocketFilterSnooper) pollPackets() {
 	}
 }
 
-func (s *SocketFilterSnooper) logDNSStats() {
+func (s *socketFilterSnooper) logDNSStats() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
@@ -227,7 +229,7 @@ func (s *SocketFilterSnooper) logDNSStats() {
 	}
 }
 
-func (s *SocketFilterSnooper) getCachedTranslation() *translation {
+func (s *socketFilterSnooper) getCachedTranslation() *translation {
 	t := s.translation
 
 	// Recycle buffer if necessary

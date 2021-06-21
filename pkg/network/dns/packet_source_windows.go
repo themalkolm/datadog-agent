@@ -1,4 +1,4 @@
-package network
+package dns
 
 import (
 	"time"
@@ -7,15 +7,19 @@ import (
 	"github.com/google/gopacket/layers"
 )
 
-var _ PacketSource = &windowsPacketSource{}
+var _ packetSource = &windowsPacketSource{}
 
 type windowsPacketSource struct {
-	di *DriverInterface
+	di *dnsDriver
 }
 
-// NewWindowsPacketSource constructs a new packet source
-func NewWindowsPacketSource(di *DriverInterface) PacketSource {
-	return &windowsPacketSource{di: di}
+// newWindowsPacketSource constructs a new packet source
+func newWindowsPacketSource() (packetSource, error) {
+	di, err := newDriver()
+	if err != nil {
+		return nil, err
+	}
+	return &windowsPacketSource{di: di}, nil
 }
 
 func (p *windowsPacketSource) VisitPackets(exit <-chan struct{}, visit func([]byte, time.Time) error) error {
@@ -24,7 +28,6 @@ func (p *windowsPacketSource) VisitPackets(exit <-chan struct{}, visit func([]by
 		if err != nil {
 			return err
 		}
-
 		if !didReadPacket {
 			return nil
 		}
@@ -35,7 +38,6 @@ func (p *windowsPacketSource) VisitPackets(exit <-chan struct{}, visit func([]by
 			return nil
 		default:
 		}
-
 	}
 }
 
@@ -49,5 +51,5 @@ func (p *windowsPacketSource) Stats() map[string]int64 {
 }
 
 func (p *windowsPacketSource) Close() {
-	// this is a no-op because all the lifecycles are handled by driver_interface.go
+	_ = p.di.Close()
 }

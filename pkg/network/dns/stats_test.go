@@ -1,7 +1,10 @@
-package network
+//+build windows linux_bpf
+
+package dns
 
 import (
 	"fmt"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,18 +19,18 @@ const (
 	DNSTimeoutSecs = 10
 )
 
-func getSampleDNSKey() DNSKey {
-	return DNSKey{
-		serverIP:   util.AddressFromString("8.8.8.8"),
-		clientIP:   util.AddressFromString("1.1.1.1"),
-		clientPort: 1000,
-		protocol:   UDP,
+func getSampleDNSKey() Key {
+	return Key{
+		ServerIP:   util.AddressFromString("8.8.8.8"),
+		ClientIP:   util.AddressFromString("1.1.1.1"),
+		ClientPort: 1000,
+		Protocol:   syscall.IPPROTO_UDP,
 	}
 }
 
 func testLatency(
 	t *testing.T,
-	respType DNSPacketType,
+	respType packetType,
 	delta time.Duration,
 	expectedSuccessLatency uint64,
 	expectedFailureLatency uint64,
@@ -36,7 +39,7 @@ func testLatency(
 	var d = "abc.com"
 	sk := newDNSStatkeeper(DNSTimeoutSecs*time.Second, 10000)
 	key := getSampleDNSKey()
-	qPkt := dnsPacketInfo{transactionID: 1, pktType: Query, key: key, question: d}
+	qPkt := dnsPacketInfo{transactionID: 1, pktType: query, key: key, question: d}
 	then := time.Now()
 	sk.ProcessPacketInfo(qPkt, then)
 	stats := sk.GetAndResetAllStats()
@@ -50,35 +53,35 @@ func testLatency(
 	require.Contains(t, stats, key)
 	require.Contains(t, stats[key], d)
 
-	assert.Equal(t, expectedSuccessLatency, stats[key][d].DNSSuccessLatencySum)
-	assert.Equal(t, expectedFailureLatency, stats[key][d].DNSFailureLatencySum)
-	assert.Equal(t, expectedTimeouts, stats[key][d].DNSTimeouts)
+	assert.Equal(t, expectedSuccessLatency, stats[key][d].SuccessLatencySum)
+	assert.Equal(t, expectedFailureLatency, stats[key][d].FailureLatencySum)
+	assert.Equal(t, expectedTimeouts, stats[key][d].Timeouts)
 }
 
 func TestSuccessLatency(t *testing.T) {
 	delta := 10 * time.Microsecond
-	testLatency(t, SuccessfulResponse, delta, uint64(delta.Microseconds()), 0, 0)
+	testLatency(t, successfulResponse, delta, uint64(delta.Microseconds()), 0, 0)
 }
 
 func TestFailureLatency(t *testing.T) {
 	delta := 10 * time.Microsecond
-	testLatency(t, FailedResponse, delta, 0, uint64(delta.Microseconds()), 0)
+	testLatency(t, failedResponse, delta, 0, uint64(delta.Microseconds()), 0)
 }
 
 func TestTimeout(t *testing.T) {
 	delta := DNSTimeoutSecs*time.Second + 10*time.Microsecond
-	testLatency(t, SuccessfulResponse, delta, 0, 0, 1)
+	testLatency(t, successfulResponse, delta, 0, 0, 1)
 }
 
 func TestExpiredStateRemoval(t *testing.T) {
 	sk := newDNSStatkeeper(DNSTimeoutSecs*time.Second, 10000)
 	key := getSampleDNSKey()
 	var d = "abc.com"
-	qPkt1 := dnsPacketInfo{transactionID: 1, pktType: Query, key: key, question: d}
-	rPkt1 := dnsPacketInfo{transactionID: 1, key: key, pktType: SuccessfulResponse}
-	qPkt2 := dnsPacketInfo{transactionID: 2, pktType: Query, key: key, question: d}
-	qPkt3 := dnsPacketInfo{transactionID: 3, pktType: Query, key: key, question: d}
-	rPkt3 := dnsPacketInfo{transactionID: 3, key: key, pktType: SuccessfulResponse}
+	qPkt1 := dnsPacketInfo{transactionID: 1, pktType: query, key: key, question: d}
+	rPkt1 := dnsPacketInfo{transactionID: 1, key: key, pktType: successfulResponse}
+	qPkt2 := dnsPacketInfo{transactionID: 2, pktType: query, key: key, question: d}
+	qPkt3 := dnsPacketInfo{transactionID: 3, pktType: query, key: key, question: d}
+	rPkt3 := dnsPacketInfo{transactionID: 3, key: key, pktType: successfulResponse}
 
 	sk.ProcessPacketInfo(qPkt1, time.Now())
 	sk.ProcessPacketInfo(rPkt1, time.Now())
@@ -93,24 +96,24 @@ func TestExpiredStateRemoval(t *testing.T) {
 	require.Contains(t, stats, key)
 	require.Contains(t, stats[key], d)
 
-	require.Contains(t, stats[key][d].DNSCountByRcode, uint32(0))
-	assert.Equal(t, uint32(2), stats[key][d].DNSCountByRcode[0])
-	assert.Equal(t, uint32(1), stats[key][d].DNSTimeouts)
+	require.Contains(t, stats[key][d].CountByRcode, uint32(0))
+	assert.Equal(t, uint32(2), stats[key][d].CountByRcode[0])
+	assert.Equal(t, uint32(1), stats[key][d].Timeouts)
 }
 
 func BenchmarkStats(b *testing.B) {
 	key := getSampleDNSKey()
 
 	var packets []dnsPacketInfo
-	for j := 0; j < MaxStateMapSize*2; j++ {
-		qPkt := dnsPacketInfo{pktType: Query, key: key}
+	for j := 0; j < maxStateMapSize*2; j++ {
+		qPkt := dnsPacketInfo{pktType: query, key: key}
 		qPkt.transactionID = uint16(j)
 		packets = append(packets, qPkt)
 	}
 	ts := time.Now()
 
 	// Benchmark map size with different number of packets
-	for _, numPackets := range []int{MaxStateMapSize / 10, MaxStateMapSize / 2, MaxStateMapSize, MaxStateMapSize * 2} {
+	for _, numPackets := range []int{maxStateMapSize / 10, maxStateMapSize / 2, maxStateMapSize, maxStateMapSize * 2} {
 		b.Run(fmt.Sprintf("Packets#-%d", numPackets), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()

@@ -6,9 +6,11 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/network/dns"
 	"github.com/DataDog/datadog-agent/pkg/network/http"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 
@@ -1145,15 +1147,15 @@ func TestDNSStatsWithMultipleClients(t *testing.T) {
 		DPort:  53,
 	}
 
-	dKey := DNSKey{clientIP: c.Source, clientPort: c.SPort, serverIP: c.Dest, protocol: c.Type}
+	dKey := dns.Key{ClientIP: c.Source, ClientPort: c.SPort, ServerIP: c.Dest, Protocol: getIPProtocol(c.Type)}
 
-	getStats := func() map[DNSKey]map[string]DNSStats {
+	getStats := func() map[dns.Key]map[string]dns.Stats {
 		var d = "foo.com"
-		statsByDomain := make(map[DNSKey]map[string]DNSStats)
-		stats := make(map[string]DNSStats)
+		statsByDomain := make(map[dns.Key]map[string]dns.Stats)
+		stats := make(map[string]dns.Stats)
 		countByRcode := make(map[uint32]uint32)
 		countByRcode[uint32(DNSResponseCodeNoError)] = 1
-		stats[d] = DNSStats{DNSCountByRcode: countByRcode}
+		stats[d] = dns.Stats{CountByRcode: countByRcode}
 		statsByDomain[dKey] = stats
 		return statsByDomain
 	}
@@ -1197,14 +1199,14 @@ func TestDNSStatsWithMultipleClientsWithDomainCollectionEnabled(t *testing.T) {
 		DPort:  53,
 	}
 
-	dKey := DNSKey{clientIP: c.Source, clientPort: c.SPort, serverIP: c.Dest, protocol: c.Type}
+	dKey := dns.Key{ClientIP: c.Source, ClientPort: c.SPort, ServerIP: c.Dest, Protocol: getIPProtocol(c.Type)}
 	var d = "foo.com"
-	getStats := func() map[DNSKey]map[string]DNSStats {
-		statsByDomain := make(map[DNSKey]map[string]DNSStats)
-		stats := make(map[string]DNSStats)
+	getStats := func() map[dns.Key]map[string]dns.Stats {
+		statsByDomain := make(map[dns.Key]map[string]dns.Stats)
+		stats := make(map[string]dns.Stats)
 		countByRcode := make(map[uint32]uint32)
 		countByRcode[uint32(DNSResponseCodeNoError)] = 1
-		stats[d] = DNSStats{DNSCountByRcode: countByRcode}
+		stats[d] = dns.Stats{CountByRcode: countByRcode}
 		statsByDomain[dKey] = stats
 		return statsByDomain
 	}
@@ -1223,7 +1225,7 @@ func TestDNSStatsWithMultipleClientsWithDomainCollectionEnabled(t *testing.T) {
 
 	conns := state.GetDelta(client1, latestEpochTime(), nil, getStats(), nil).Connections
 	require.Len(t, conns, 1)
-	assert.EqualValues(t, 1, conns[0].DNSStatsByDomain[d].DNSCountByRcode[DNSResponseCodeNoError])
+	assert.EqualValues(t, 1, conns[0].DNSStatsByDomain[d].CountByRcode[DNSResponseCodeNoError])
 	// domain agnostic stats should be 0
 	assert.EqualValues(t, 0, conns[0].DNSSuccessfulResponses)
 
@@ -1231,14 +1233,14 @@ func TestDNSStatsWithMultipleClientsWithDomainCollectionEnabled(t *testing.T) {
 	conns = state.GetDelta(client3, latestEpochTime(), []ConnectionStats{c}, getStats(), nil).Connections
 	require.Len(t, conns, 1)
 	// DNS stats should be available for the new client
-	assert.EqualValues(t, 1, conns[0].DNSStatsByDomain[d].DNSCountByRcode[DNSResponseCodeNoError])
+	assert.EqualValues(t, 1, conns[0].DNSStatsByDomain[d].CountByRcode[DNSResponseCodeNoError])
 	// domain agnostic stats should be 0
 	assert.EqualValues(t, 0, conns[0].DNSSuccessfulResponses)
 
 	conns = state.GetDelta(client2, latestEpochTime(), []ConnectionStats{c}, getStats(), nil).Connections
 	require.Len(t, conns, 1)
 	// 2nd client should get accumulated stats
-	assert.EqualValues(t, 3, conns[0].DNSStatsByDomain[d].DNSCountByRcode[DNSResponseCodeNoError])
+	assert.EqualValues(t, 3, conns[0].DNSStatsByDomain[d].CountByRcode[DNSResponseCodeNoError])
 	// domain agnostic stats should be 0
 	assert.EqualValues(t, 0, conns[0].DNSSuccessfulResponses)
 }
@@ -1255,12 +1257,12 @@ func TestDNSStatsPIDCollisions(t *testing.T) {
 	}
 
 	var d = "foo.com"
-	dKey := DNSKey{clientIP: c.Source, clientPort: c.SPort, serverIP: c.Dest, protocol: c.Type}
-	statsByDomain := make(map[DNSKey]map[string]DNSStats)
-	stats := make(map[string]DNSStats)
+	dKey := dns.Key{ClientIP: c.Source, ClientPort: c.SPort, ServerIP: c.Dest, Protocol: getIPProtocol(c.Type)}
+	statsByDomain := make(map[dns.Key]map[string]dns.Stats)
+	stats := make(map[string]dns.Stats)
 	countByRcode := make(map[uint32]uint32)
 	countByRcode[DNSResponseCodeNoError] = 1
-	stats[d] = DNSStats{DNSCountByRcode: countByRcode}
+	stats[d] = dns.Stats{CountByRcode: countByRcode}
 	statsByDomain[dKey] = stats
 
 	client := "client"
@@ -1526,19 +1528,24 @@ func TestDetermineConnectionIntraHost(t *testing.T) {
 		},
 	}
 
-	var conns []ConnectionStats
+	conns := make([]ConnectionStats, 0, len(tests))
 	for _, te := range tests {
 		conns = append(conns, te.conn)
 	}
 	state := newDefaultState().(*networkState)
 	state.determineConnectionIntraHost(conns)
 	for i, te := range tests {
-		assert.Equal(t, te.intraHost, conns[i].IntraHost, "name: %s, conn: %+v", te.name, conns[i])
-		if conns[i].Direction == INCOMING {
-			if conns[i].IntraHost {
-				assert.Nil(t, conns[i].IPTranslation, "name: %s, conn: %+v", te.name, conns[i])
+		if i >= len(conns) {
+			assert.Failf(t, "missing connection for %s", te.name)
+			continue
+		}
+		c := conns[i]
+		assert.Equal(t, te.intraHost, c.IntraHost, "name: %s, conn: %+v", te.name, c)
+		if c.Direction == INCOMING {
+			if c.IntraHost {
+				assert.Nil(t, c.IPTranslation, "name: %s, conn: %+v", te.name, c)
 			} else {
-				assert.NotNil(t, conns[i].IPTranslation, "name: %s, conn: %+v", te.name, conns[i])
+				assert.NotNil(t, c.IPTranslation, "name: %s, conn: %+v", te.name, c)
 			}
 		}
 	}
@@ -1572,4 +1579,15 @@ func latestEpochTime() uint64 {
 func newDefaultState() State {
 	// Using values from ebpf.NewConfig()
 	return NewState(2*time.Minute, 50000, 75000, 75000, 7500, false)
+}
+
+func getIPProtocol(nt ConnectionType) uint8 {
+	switch nt {
+	case TCP:
+		return syscall.IPPROTO_TCP
+	case UDP:
+		return syscall.IPPROTO_UDP
+	default:
+		panic("unknown connection type")
+	}
 }

@@ -1,4 +1,6 @@
-package network
+//+build windows linux_bpf
+
+package dns
 
 import (
 	"sort"
@@ -91,8 +93,8 @@ func (c *reverseDNSCache) Add(translation *translation, now time.Time) bool {
 	return true
 }
 
-func (c *reverseDNSCache) Get(conns []ConnectionStats, now time.Time) map[util.Address][]string {
-	if len(conns) == 0 {
+func (c *reverseDNSCache) Get(ips []util.Address, now time.Time) map[util.Address][]string {
+	if len(ips) == 0 {
 		return nil
 	}
 
@@ -127,9 +129,8 @@ func (c *reverseDNSCache) Get(conns []ConnectionStats, now time.Time) map[util.A
 	}
 
 	c.mux.Lock()
-	for _, conn := range conns {
-		collectNamesForIP(conn.Source)
-		collectNamesForIP(conn.Dest)
+	for _, ip := range ips {
+		collectNamesForIP(ip)
 	}
 	c.mux.Unlock()
 
