@@ -60,7 +60,7 @@ type Module struct {
 	ctx            context.Context
 	cancelFnc      context.CancelFunc
 
-	e2e *E2ETester
+	selfTester *SelfTester
 }
 
 // Register the runtime security agent module
@@ -106,8 +106,8 @@ func (m *Module) Register(_ *module.Router) error {
 
 	m.probe.SetEventHandler(m)
 
-	if m.e2e.Enabled {
-		if err := m.endToEndInjectionTest(); err != nil {
+	if m.selfTester.Enabled {
+		if err := m.doSelfTest(); err != nil {
 			log.Errorf("failed to run e2e injection test: %v", err)
 		}
 	}
@@ -257,7 +257,7 @@ rules:
 ...
 `
 
-func (m *Module) endToEndInjectionTest() error {
+func (m *Module) doSelfTest() error {
 	// Create temp directory to put rules in
 	tmpDir, err := ioutil.TempDir("", "injection_test_rule")
 	if err != nil {
@@ -314,8 +314,8 @@ func (m *Module) endToEndInjectionTest() error {
 		return err
 	}
 
-	m.e2e.BeginWaitingForEvent()
-	defer m.e2e.EndWaitingForEvent()
+	m.selfTester.BeginWaitingForEvent()
+	defer m.selfTester.EndWaitingForEvent()
 
 	// we need to use touch (or any other external program) as our PID is discarded by probes
 	// so the events would not be generated
@@ -328,7 +328,7 @@ func (m *Module) endToEndInjectionTest() error {
 	timer := time.After(10 * time.Second)
 	for {
 		select {
-		case event := <-m.e2e.EventChan:
+		case event := <-m.selfTester.EventChan:
 			// success
 			eventOpenFilePath, err := event.GetFieldValue("open.file.path")
 			if err != nil {
@@ -377,8 +377,6 @@ func (m *Module) EventDiscarderFound(rs *rules.RuleSet, event eval.Event, field 
 
 // HandleEvent is called by the probe when an event arrives from the kernel
 func (m *Module) HandleEvent(event *sprobe.Event) {
-	m.e2e.SendEvent(event)
-
 	if ruleSet := m.ruleSets[atomic.LoadUint64(&m.currentRuleSet)]; ruleSet != nil {
 		ruleSet.Evaluate(event)
 	}
@@ -418,6 +416,7 @@ func (m *Module) RuleMatch(rule *rules.Rule, event eval.Event) {
 		return append(tags, m.probe.GetResolvers().TagsResolver.Resolve(id)...)
 	}
 
+	m.selfTester.SendEventIfExpecting(event)
 	m.SendEvent(rule, event, extTagsCb)
 }
 
@@ -524,7 +523,7 @@ func NewModule(cfg *sconfig.Config) (module.Module, error) {
 		ctx:            ctx,
 		cancelFnc:      cancelFnc,
 
-		e2e: NewE2ETester(cfg.E2EStartTestEnabled),
+		selfTester: NewSelfTester(cfg.E2EStartTestEnabled),
 	}
 
 	seclog.SetPatterns(cfg.LogPatterns)
@@ -534,29 +533,34 @@ func NewModule(cfg *sconfig.Config) (module.Module, error) {
 	return m, nil
 }
 
-type E2ETester struct {
+// SelfTester represents all the state needed to conduct rule injection test at startup
+type SelfTester struct {
 	Enabled         bool
 	waitingForEvent bool
-	EventChan       chan *sprobe.Event
+	EventChan       chan eval.Event
 }
 
-func NewE2ETester(enabled bool) *E2ETester {
-	return &E2ETester{
+// NewSelfTester returns a new SelfTester, enabled or not
+func NewSelfTester(enabled bool) *SelfTester {
+	return &SelfTester{
 		Enabled:         enabled,
 		waitingForEvent: false,
-		EventChan:       make(chan *sprobe.Event),
+		EventChan:       make(chan eval.Event),
 	}
 }
 
-func (t *E2ETester) BeginWaitingForEvent() {
+// BeginWaitingForEvent passes the tester in the waiting for event state
+func (t *SelfTester) BeginWaitingForEvent() {
 	t.waitingForEvent = true
 }
 
-func (t *E2ETester) EndWaitingForEvent() {
+// EndWaitingForEvent exits the waiting for event state
+func (t *SelfTester) EndWaitingForEvent() {
 	t.waitingForEvent = false
 }
 
-func (t *E2ETester) SendEvent(event *sprobe.Event) {
+// SendEvent sends an event to the tester
+func (t *SelfTester) SendEventIfExpecting(event eval.Event) {
 	if t.Enabled && t.waitingForEvent {
 		t.EventChan <- event
 	}
