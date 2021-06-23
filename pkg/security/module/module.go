@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
 	"sync"
@@ -58,6 +59,8 @@ type Module struct {
 	sigupChan      chan os.Signal
 	ctx            context.Context
 	cancelFnc      context.CancelFunc
+
+	e2e *E2ETester
 }
 
 // Register the runtime security agent module
@@ -104,7 +107,7 @@ func (m *Module) Register(_ *module.Router) error {
 	m.probe.SetEventHandler(m)
 
 	if err := m.endToEndInjectionTest(); err != nil {
-		return err
+		log.Errorf("failed to run e2e injection test: %v", err)
 	}
 
 	if err := m.Reload(); err != nil {
@@ -309,13 +312,37 @@ func (m *Module) endToEndInjectionTest() error {
 		return err
 	}
 
-	f, err := os.Open(targetFilePath)
-	if err != nil {
+	m.e2e.BeginWaitingForEvent()
+	defer m.e2e.EndWaitingForEvent()
+
+	// we need to use touch (or any other external program) as our PID is discarded by probes
+	// so the events would not be generated
+	cmd := exec.Command("touch", targetFilePath)
+	if err := cmd.Run(); err != nil {
+		log.Debugf("error running touch: %v", err)
 		return err
 	}
-	defer f.Close()
 
-	return nil
+	timer := time.After(10 * time.Second)
+	for {
+		select {
+		case event := <-m.e2e.EventChan:
+			// success
+			eventOpenFilePath, err := event.GetFieldValue("open.file.path")
+			if err != nil {
+				return errors.Wrap(err, "failed to extract open file path from event")
+			}
+
+			if eventOpenFilePath != targetFilePath {
+				continue
+			}
+
+			log.Debugf("Successfully run e2e injection test")
+			return nil
+		case <-timer:
+			return errors.New("failed to receive expected event")
+		}
+	}
 }
 
 // Close the module
@@ -348,6 +375,8 @@ func (m *Module) EventDiscarderFound(rs *rules.RuleSet, event eval.Event, field 
 
 // HandleEvent is called by the probe when an event arrives from the kernel
 func (m *Module) HandleEvent(event *sprobe.Event) {
+	m.e2e.SendEvent(event)
+
 	if ruleSet := m.ruleSets[atomic.LoadUint64(&m.currentRuleSet)]; ruleSet != nil {
 		ruleSet.Evaluate(event)
 	}
@@ -492,6 +521,8 @@ func NewModule(cfg *sconfig.Config) (module.Module, error) {
 		currentRuleSet: 1,
 		ctx:            ctx,
 		cancelFnc:      cancelFnc,
+
+		e2e: NewE2ETester(true),
 	}
 
 	seclog.SetPatterns(cfg.LogPatterns)
@@ -499,4 +530,32 @@ func NewModule(cfg *sconfig.Config) (module.Module, error) {
 	sapi.RegisterSecurityModuleServer(m.grpcServer, m.apiServer)
 
 	return m, nil
+}
+
+type E2ETester struct {
+	enabled         bool
+	waitingForEvent bool
+	EventChan       chan *sprobe.Event
+}
+
+func NewE2ETester(enabled bool) *E2ETester {
+	return &E2ETester{
+		enabled:         enabled,
+		waitingForEvent: false,
+		EventChan:       make(chan *sprobe.Event),
+	}
+}
+
+func (t *E2ETester) BeginWaitingForEvent() {
+	t.waitingForEvent = true
+}
+
+func (t *E2ETester) EndWaitingForEvent() {
+	t.waitingForEvent = false
+}
+
+func (t *E2ETester) SendEvent(event *sprobe.Event) {
+	if t.enabled && t.waitingForEvent {
+		t.EventChan <- event
+	}
 }
