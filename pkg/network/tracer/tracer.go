@@ -84,7 +84,7 @@ type Tracer struct {
 	// Internal buffer used to compute bytekeys
 	buf []byte
 
-	// Connections for the tracer to blacklist
+	// Connections for the tracer to exclude
 	sourceExcludes []*network.ConnectionFilter
 	destExcludes   []*network.ConnectionFilter
 
@@ -477,18 +477,6 @@ func (t *Tracer) initPerfPolling(perf *ddebpf.PerfHandler) (*PerfBatchManager, e
 	}()
 
 	return batchManager, nil
-}
-
-// shouldSkipConnection returns whether or not the tracer should ignore a given connection:
-//  • Local DNS (*:53) requests if configured (default: true)
-func (t *Tracer) shouldSkipConnection(conn *network.ConnectionStats) bool {
-	isDNSConnection := conn.DPort == 53 || conn.SPort == 53
-	if !t.config.CollectLocalDNS && isDNSConnection && conn.Dest.IsLoopback() {
-		return true
-	} else if network.IsExcludedConnection(t.sourceExcludes, t.destExcludes, conn) {
-		return true
-	}
-	return false
 }
 
 func (t *Tracer) storeClosedConn(cs *network.ConnectionStats) {
