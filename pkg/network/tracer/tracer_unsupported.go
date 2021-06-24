@@ -1,4 +1,4 @@
-// +build !linux_bpf,!windows
+// +build linux,!linux_bpf windows,!npm
 
 package tracer
 

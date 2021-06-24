@@ -1,4 +1,4 @@
-// +build linux_bpf windows
+// +build linux_bpf windows,npm
 
 package tracer
 
@@ -251,7 +251,7 @@ func TestDNATIntraHostIntegration(t *testing.T) {
 	require.NoError(t, err)
 	defer tr.Stop()
 
-	conns := getConnections(t, tr).Conns
+	_ = getConnections(t, tr).Conns
 
 	server := &TCPServer{
 		address: "1.1.1.1:5432",
@@ -284,7 +284,7 @@ func TestDNATIntraHostIntegration(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	conns = getConnections(t, tr).Conns
+	conns := getConnections(t, tr).Conns
 	assert.Condition(t, func() bool {
 		for _, c := range conns {
 			if c.Source == util.AddressFromString("1.1.1.1") {
