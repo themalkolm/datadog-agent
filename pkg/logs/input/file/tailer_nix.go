@@ -33,7 +33,10 @@ func (t *Tailer) setup(offset int64, whence int) error {
 	}
 
 	t.osFile = f
-	ret, _ := f.Seek(offset, whence)
+	ret, err := f.Seek(offset, whence)
+	if err != nil {
+		return err
+	}
 	t.readOffset = ret
 	t.decodedOffset = ret
 
