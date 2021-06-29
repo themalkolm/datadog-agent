@@ -110,13 +110,19 @@ func (c *CRICheck) generateMetrics(sender aggregator.Sender, containerStats map[
 
 		ctnStatus, err := criUtil.GetContainerStatus(cid)
 		if err != nil {
-			log.Errorf("Could not retrieve the status of containe %q: %s", cid, err)
+			log.Errorf("Could not retrieve the status of container %q: %s", cid, err)
 			continue
 		}
 
 		if ctnStatus == nil || c.isExcluded(ctnStatus) {
 			continue
 		}
+
+		var name string
+		if ctnStatus.Metadata != nil {
+			name = ctnStatus.Metadata.Name
+		}
+		log.Infof("cri container: %q (%q) status: %s", cid, name, ctnStatus.State.String())
 
 		entityID := containers.BuildTaggerEntityName(cid)
 		tags, err := tagger.Tag(entityID, collectors.HighCardinality)

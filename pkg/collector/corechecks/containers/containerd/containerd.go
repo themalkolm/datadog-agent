@@ -187,6 +187,8 @@ func computeMetrics(sender aggregator.Sender, cu cutil.ContainerdItf, fil *ddCon
 			continue
 		}
 
+		log.Infof("containerd container: %q status: %+v", ctn.ID(), info)
+
 		tags, err := collectTags(info)
 		if err != nil {
 			log.Errorf("Could not collect tags for container %s: %s", ctn.ID()[:12], err)
