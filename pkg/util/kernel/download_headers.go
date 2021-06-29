@@ -10,11 +10,11 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 
-	"github.com/DataDog/nikos/apt"
-	"github.com/DataDog/nikos/cos"
-	"github.com/DataDog/nikos/rpm"
-	"github.com/DataDog/nikos/types"
-	"github.com/DataDog/nikos/wsl"
+	"github.com/ISauve/nikos/apt"
+	"github.com/ISauve/nikos/cos"
+	"github.com/ISauve/nikos/rpm"
+	"github.com/ISauve/nikos/types"
+	"github.com/ISauve/nikos/wsl"
 )
 
 // customLogger is a wrapper around our logging utility which allows nikos to use our logging functions

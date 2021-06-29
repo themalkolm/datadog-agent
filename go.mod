@@ -59,11 +59,12 @@ require (
 	github.com/DataDog/gohai v0.0.0-20210303102637-6b668acb50dd
 	github.com/DataDog/gopsutil v0.0.0-20200624212600-1b53412ef321
 	github.com/DataDog/mmh3 v0.0.0-20200316233529-f5b682d8c981 // indirect
-	github.com/DataDog/nikos v1.1.0
+	github.com/DataDog/nikos v1.1.0 // indirect
 	github.com/DataDog/sketches-go v1.0.0
 	github.com/DataDog/viper v1.8.0
 	github.com/DataDog/watermarkpodautoscaler v0.2.1-0.20210323121426-cfb2caa5613f
 	github.com/DataDog/zstd_0 v0.0.0-20210310093942-586c1286621f
+	github.com/ISauve/nikos v0.0.0-20210628162212-dc5c4d382ef7
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0
 	github.com/Masterminds/sprig v2.22.0+incompatible
